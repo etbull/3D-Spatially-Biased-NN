@@ -12,6 +12,7 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from sklearn.metrics import f1_score, confusion_matrix, accuracy_score
+import os
 
 """
 Basic Fully connected Deep Learning NN
@@ -49,7 +50,7 @@ class Data(Dataset):
 def standardise(trainingPathExo, testingPathExo):
     trainDF = pd.read_csv(trainingPathExo)
     testDF = pd.read_csv(testingPathExo)
-    
+
     scaler = StandardScaler()
     scaler.fit(trainDF.drop(columns=['LABEL']))
     xTrain = scaler.transform(trainDF.drop(columns=['LABEL']))
@@ -146,6 +147,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=50, lr=0.001):
     torch.save(model.state_dict(), "modelSave.pth")
     print("Model saved!")
 
+
 # The main loop of the program 
 def main():
 
@@ -153,6 +155,10 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cudnn.benchmark = True
     print("Using device:", device)
+  
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    trainingDataPath = os.path.join(base_dir, "Data", "breast_cancer", "training.csv")
+    testingDataPath = os.path.join(base_dir, "Data", "breast_cancer", "testing.csv")
 
     # First, standardising data, function returns 4 lists, all standardised.
     xTrain, xTest, yTrain, yTest = standardise(trainingDataPath, testingDataPath)

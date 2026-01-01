@@ -1,7 +1,7 @@
 # 3D-Spatially-Biased-NN
 A modification to PyTorch that allows for higher dimensional modelling and spatially biased connections between these higher dimension layers. 
 
-# Overall Plan
+## Overall Plan
 1. Create a basic template to modify and use
 2. Choose a good basic dataset with which to use as a benchmark
 3. Train the basic template (BT) on the data, then test and get benchmarks 
