@@ -14,38 +14,29 @@ from tqdm import tqdm
 from sklearn.metrics import f1_score, confusion_matrix, accuracy_score
 
 """
-This model is based off a CNN architecture, and includes multiple convolution and batch normalisation layers
-- The original model I had was a lot more complex, but lead to overfitting
+Basic Fully connected Deep Learning NN
 """
 class Model(nn.Module):
     def __init__(self, input_length, num_classes):
         super(Model, self).__init__()
-        self.conv1 = nn.Conv1d(1, 32, 5, padding=2)
-        self.bn1 = nn.BatchNorm1d(32)
-        self.conv2 = nn.Conv1d(32, 64, 5, padding=2)
-        self.bn2 = nn.BatchNorm1d(64)
-        self.conv3 = nn.Conv1d(64, 128, 3, padding=1)
-        self.bn3 = nn.BatchNorm1d(128)
-        self.pool = nn.MaxPool1d(2)
-        self.dropout = nn.Dropout(0.3)
-        self.fc1 = nn.Linear((input_length // 2) * 128, 128)
-        self.fc2 = nn.Linear(128, num_classes)
+        self.linear_relu_stack = nn.Sequential(
+            nn.Linear(28*28, 512),
+            nn.ReLU(),
+            nn.Linear(512, 512),
+            nn.ReLU(),
+            nn.Linear(512, 10),
+        )
         
     def forward(self, x):
-        x = x.unsqueeze(1)
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = self.pool(F.relu(self.bn3(self.conv3(x))))
-        x = self.dropout(x)
-        x = x.view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        x = self.flatten(x)
+        logits = self.linear_relu_stack(x)
+        return logits
+
 
 """
 The Data class defines the dataset which returns the training and target values when called
 """
-class FluxData(Dataset):
+class Data(Dataset):
     def __init__(self, X, y):
         self.X = torch.tensor(X, dtype=torch.float32)
         self.y = torch.tensor(y, dtype=torch.long)
@@ -54,30 +45,11 @@ class FluxData(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
     
-# This function adds the amature positive data to the training and testing data frames
-def addAmature(trainDF, testDF, trainingPathAma, testingPathAma, status):
-    if status:
-        amaTrainDF = pd.read_csv(trainingPathAma)
-        amaTestDF = pd.read_csv(testingPathAma)  
-        amaTrainDF["LABEL"] = 2
-        amaTestDF["LABEL"] = 2
-        trainDF = pd.concat([trainDF, amaTrainDF], ignore_index=True)
-        testDF = pd.concat([testDF, amaTestDF], ignore_index=True)
-        print('Amature Data Sucessfully Intergrated...')
-    else:
-        print('Amature Data Not Intergrated...')
-    return trainDF, testDF
-
 # This function does data loading + standardization
-def standardise(trainingPathExo, testingPathExo, trainingPathAma, testingPathAma):
+def standardise(trainingPathExo, testingPathExo):
     trainDF = pd.read_csv(trainingPathExo)
     testDF = pd.read_csv(testingPathExo)
-    trainDF, testDF = addAmature(trainDF, testDF, trainingPathAma, testingPathAma, True)
     
-    # Make labels 0/1
-    trainDF['LABEL'] = trainDF['LABEL'] - 1
-    testDF['LABEL'] = testDF['LABEL'] - 1
-
     scaler = StandardScaler()
     scaler.fit(trainDF.drop(columns=['LABEL']))
     xTrain = scaler.transform(trainDF.drop(columns=['LABEL']))
@@ -182,13 +154,12 @@ def main():
     torch.backends.cudnn.benchmark = True
     print("Using device:", device)
 
-    # First, standardising data, function returns 4 lists, all standardised. Also augments data to add more positives
-    xTrain, xTest, yTrain, yTest = standardise(trainingPathExo, testingPathExo, trainingPathAma, testingPathAma)
-    xTrain, yTrain = augmentPositives(xTrain, yTrain, 3)
+    # First, standardising data, function returns 4 lists, all standardised.
+    xTrain, xTest, yTrain, yTest = standardise(trainingDataPath, testingDataPath)
 
     # Next, creating dataset objects
-    trainDataset = FluxData(xTrain, yTrain)
-    testDataset = FluxData(xTest, yTest)
+    trainDataset = Data(xTrain, yTrain)
+    testDataset = Data(xTest, yTest)
     print('Datasets created...')
 
     # Creating dataloader object 
