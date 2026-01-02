@@ -48,15 +48,23 @@ class Data(Dataset):
     
 # This function does data loading + standardization
 def standardise(trainingPathExo, testingPathExo):
-    trainDF = pd.read_csv(trainingPathExo)
-    testDF = pd.read_csv(testingPathExo)
+    """
+    Standardises the data, creates dataframe for training and testing data
+    
+    :param trainingPathExo: path to training data csv
+    :param testingPathExo: path to testing data csv
+    """
+
+    trainDF = pd.read_csv(trainingPathExo).drop(columns="id")
+    testDF = pd.read_csv(testingPathExo).drop(columns="id")
+    #print(testDF.head())
 
     scaler = StandardScaler()
-    scaler.fit(trainDF.drop(columns=['LABEL']))
-    xTrain = scaler.transform(trainDF.drop(columns=['LABEL']))
-    xTest = scaler.transform(testDF.drop(columns=['LABEL']))
-    yTrain = trainDF['LABEL'].values
-    yTest = testDF['LABEL'].values
+    scaler.fit(trainDF.drop(columns=['diagnosis']))
+    xTrain = scaler.transform(trainDF.drop(columns=['diagnosis']))
+    xTest = scaler.transform(testDF.drop(columns=['diagnosis']))
+    yTrain = trainDF['diagnosis'].replace('M',1).replace('B',0).values
+    yTest = testDF['diagnosis'].replace('M',1).replace('B',0).values
     print("Class distribution (train):", np.bincount(yTrain))
     print("Class distribution (test):", np.bincount(yTest))
     return xTrain, xTest, yTrain, yTest
