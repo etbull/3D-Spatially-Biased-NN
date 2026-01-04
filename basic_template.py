@@ -54,24 +54,44 @@ class Data(Dataset):
 # This function does data loading + standardization
 def standardise(trainingPathExo, testingPathExo):
     """
-    Standardises the data, creates dataframe for training and testing data
+    Standardises and Cleans the data, creates dataframe for training and testing data
     
     :param trainingPathExo: path to training data csv
     :param testingPathExo: path to testing data csv
     """
 
-    trainDF = pd.read_csv(trainingPathExo).drop(columns="id")
-    testDF = pd.read_csv(testingPathExo).drop(columns="id")
-    #print(testDF.head())
+    trainDF = pd.read_csv(trainingPathExo).drop(columns="CustomerID")
+    testDF = pd.read_csv(testingPathExo).drop(columns="CustomerID")
+    print(testDF.head())
 
+    # Replacement maps for onehot encoding
+    Gender_map = {'Male':1, 'Female':2}
+    Subscription_Type_map = {'Basic':1, 'Standard':2, 'Premium':3}
+    Contract_Length_map = {'Monthly':1, 'Annual':2, 'Quarterly':3}
+
+    # Actually replacing
+    trainDF['Gender'] = trainDF['Gender'].replace(Gender_map)
+    trainDF['Subscription Type'] = trainDF['Subscription Type'].replace(Subscription_Type_map)
+    trainDF['Contract Length'] = trainDF['Contract Length'].replace(Contract_Length_map)
+    testDF['Gender'] = testDF['Gender'].replace(Gender_map)
+    testDF['Subscription Type'] = testDF['Subscription Type'].replace(Subscription_Type_map)
+    testDF['Contract Length'] = testDF['Contract Length'].replace(Contract_Length_map)
+
+    # Dropping Nan rows
+    testDF.dropna(inplace=True)
+    trainDF.dropna(inplace=True)
+
+    # Standardising
     scaler = StandardScaler()
-    scaler.fit(trainDF.drop(columns=['diagnosis']))
-    xTrain = scaler.transform(trainDF.drop(columns=['diagnosis']))
-    xTest = scaler.transform(testDF.drop(columns=['diagnosis']))
-    yTrain = trainDF['diagnosis'].replace('M',1).replace('B',0).values
-    yTest = testDF['diagnosis'].replace('M',1).replace('B',0).values
-    print("Class distribution (train):", np.bincount(yTrain))
-    print("Class distribution (test):", np.bincount(yTest))
+    scaler.fit(trainDF.drop(columns=['Churn']))
+    xTrain = scaler.transform(trainDF.drop(columns=['Churn']))
+    xTest = scaler.transform(testDF.drop(columns=['Churn']))
+    yTrain = trainDF['Churn'].values
+    yTest = testDF['Churn'].values
+
+
+    #print("Class distribution (train):", np.bincount(yTrain))
+    #print("Class distribution (test):", np.bincount(yTest))
     return xTrain, xTest, yTrain, yTest
 
 # This function augments the positive exoplanets so that there's more data
@@ -97,6 +117,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=25, lr=0.0001):
     # Compute class weights based on training labels
     y_train_labels = np.array(trainLoader.dataset.y)
     classes = np.unique(y_train_labels)
+    print(classes)
     class_weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train_labels)
     class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
 
@@ -207,11 +228,15 @@ def main():
     print("Using device:", device)
   
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    trainingDataPath = os.path.join(base_dir, "Data", "breast_cancer", "training.csv")
-    testingDataPath = os.path.join(base_dir, "Data", "breast_cancer", "testing.csv")
+    trainingDataPath = os.path.join(base_dir, "Data", "churn_data", "customer_churn_dataset-training-master.csv")
+    testingDataPath = os.path.join(base_dir, "Data", "churn_data", "customer_churn_dataset-testing-master.csv")
 
     # First, standardising data, function returns 4 lists, all standardised.
     xTrain, xTest, yTrain, yTest = standardise(trainingDataPath, testingDataPath)
+
+    # DEBUGGIN - REMOVE LATER
+    print(f'Unique Y Values : {np.unique(yTrain)}')
+    # ABOVE REMOVE LATER
 
     # Next, creating dataset objects
     trainDataset = Data(xTrain, yTrain)
