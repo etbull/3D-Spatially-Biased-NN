@@ -13,12 +13,6 @@ from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from sklearn.metrics import f1_score, confusion_matrix, accuracy_score
 import os
-import matplotlib.pyplot as plt
-
-# Some global variables for model training analysis
-accuracy_list = []
-loss_list = []
-f1_list = []
 
 """
 Basic Fully connected Deep Learning NN
@@ -93,110 +87,35 @@ def summarySave(finalLoss, model):
     print('Model Saved!')
 
 # This is the main training and evaluation loop
-def train_model(model, trainLoader, testLoader, device, epochs=25, lr=0.0001):
-    # Compute class weights based on training labels
-    y_train_labels = np.array(trainLoader.dataset.y)
-    classes = np.unique(y_train_labels)
-    class_weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train_labels)
-    class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
+def test_model(model, testLoader, device):
+    model.eval()
+    all_preds, all_labels = [], []
+    total_loss = 0.0
+    criterion = torch.nn.CrossEntropyLoss()  
 
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-    best_f1 = 0.0
-
-    for epoch in range(epochs):
-        # --- Training ---
-        model.train()
-        total_loss = 0
-        for x, y in tqdm(trainLoader, desc=f"Epoch {epoch+1}/{epochs}"):
+    with torch.no_grad():
+        count = 0
+        for x, y in testLoader:
             x, y = x.to(device), y.to(device)
-            optimizer.zero_grad()
             yHat = model(x)
             loss = criterion(yHat, y)
-            loss.backward()
-            optimizer.step()
             total_loss += loss.item()
-        avg_loss = total_loss / len(trainLoader)
-        print(f"Epoch {epoch+1} training loss: {avg_loss:.4f}")
 
-        # --- Evaluation ---
-        model.eval()
-        all_preds, all_labels, all_probs = [], [], []
-        with torch.no_grad():
-            for x, y in testLoader:
-                x, y = x.to(device), y.to(device)
-                yHat = model(x)
-                probs = F.softmax(yHat, dim=1)
-                preds = torch.argmax(yHat, dim=1)
+            preds = torch.argmax(yHat, dim=1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(y.cpu().numpy())
+            count+=1
 
-                all_probs.extend(probs[:,1].cpu().numpy())
-                all_preds.extend(preds.cpu().numpy())
-                all_labels.extend(y.cpu().numpy())
+    accuracy = accuracy_score(all_labels, all_preds)
+    f1 = f1_score(all_labels, all_preds)
+    cm = confusion_matrix(all_labels, all_preds)
 
-        # Metrics
-        all_preds = np.array(all_preds)
-        all_labels = np.array(all_labels)
-        all_probs = np.array(all_probs)
+    print(f"Testing Loss: {total_loss/len(testLoader):.4f}")
+    print(f"Accuracy: {accuracy:.4f}")
+    print(f"F1-score: {f1:.4f}")
+    print("Confusion Matrix:")
+    print(cm)
 
-        accuracy = accuracy_score(all_labels, all_preds)
-        f1 = f1_score(all_labels, all_preds)
-        cm = confusion_matrix(all_labels, all_preds)
-        tp = np.sum((all_preds == 1) & (all_labels == 1))
-
-        # Assigning metrics to tracking lists
-        accuracy_list.append(accuracy)
-        loss_list.append(avg_loss)
-        f1_list.append(f1)
-
-        print(f"Top positive probs in this epoch: {np.sort(all_probs)[-5:]}")
-        print(f"True positives: {tp} / {np.sum(all_labels==1)}")
-        print(f"Test Accuracy: {accuracy:.4f}, F1-score: {f1:.4f}")
-        print("Confusion Matrix:")
-        print(cm)
-        print("-"*50)
-
-        if f1 > best_f1:
-            best_f1 = f1
-            torch.save(model.state_dict(), "bestModel.pth")
-            print(f"New best F1: {best_f1:.4f} — model saved!\n")
-
-    # Save final model
-    print("Training complete!")
-    torch.save(model.state_dict(), "modelSave.pth")
-    print("Model saved!")
-
-def plot_training_metrics():
-    """
-    Plots several training metrics
-    
-    :param accuracy_list: List of all accuracy score over epochs
-    :param loss_list: KList of all losses ovee epochs
-    :param f1_list: List of all f1 scores over epochs
-    """
-    epochs = range(1, len(accuracy_list) + 1)
-    plt.figure(figsize=(10, 6))
-
-    # Graphing Accurtacy and loss
-    plt.subplot(2, 1, 1)
-    plt.plot(epochs, accuracy_list, label="Accuracy")
-    plt.plot(epochs, loss_list, label="Loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Value")
-    plt.title("Accuracy & Loss Over Time")
-    plt.legend()
-    plt.grid(True)
-
-    # Graphiong f1 score
-    plt.subplot(2, 1, 2)
-    plt.plot(epochs, f1_list, label="F1 Score")
-    plt.xlabel("Epoch")
-    plt.ylabel("F1 Score")
-    plt.title("F1 Score Over Time")
-    plt.legend()
-    plt.grid(True)
-
-    plt.tight_layout()
-    plt.show()
 
 # The main loop of the program 
 def main():
@@ -225,13 +144,12 @@ def main():
     print('Dataloaders created...')
 
     # Creating Model
+    PATH = "bestModel.pth"
     model = Model(xTrain.shape[1], 2)
     model.to(device)
-    print('Model created, starting training...')
-    train_model(model, trainLoader, testLoader, device)
-
-    # Plotting Training Metrics
-    plot_training_metrics()
+    model.load_state_dict(torch.load(PATH, weights_only=True))
+    print('Model Loaded, starting training...')
+    test_model(model, testLoader, device)
 
 if __name__ == "__main__":
     main()
