@@ -94,18 +94,6 @@ def standardise(trainingPathExo, testingPathExo):
     #print("Class distribution (test):", np.bincount(yTest))
     return xTrain, xTest, yTrain, yTest
 
-# This function augments the positive exoplanets so that there's more data
-def augmentPositives(X, y, factor=3, shiftMax=1500, noiseStd=0.001):
-    xAug, yAug = X.copy(), y.copy()
-    pos_idxs = np.where(y==1)[0]
-    for _ in range(factor-1):
-        for i in pos_idxs:
-            sample = np.roll(X[i], np.random.randint(-shiftMax, shiftMax))
-            sample += np.random.normal(0, noiseStd, size=sample.shape)
-            xAug = np.vstack([xAug, sample])
-            yAug = np.append(yAug, 1)
-    return xAug, yAug
-
 # This function saves the model weights
 def summarySave(finalLoss, model):
     print(f'\nModel Finished Training!\nFinal Loss = {round(finalLoss, 2)}')
@@ -113,14 +101,9 @@ def summarySave(finalLoss, model):
     print('Model Saved!')
 
 # This is the main training and evaluation loop
-def train_model(model, trainLoader, testLoader, device, epochs=25, lr=0.0001):
+def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.001):
     # Compute class weights based on training labels
-    y_train_labels = np.array(trainLoader.dataset.y)
-    classes = np.unique(y_train_labels)
-    print(classes)
-    class_weights = compute_class_weight(class_weight='balanced', classes=classes, y=y_train_labels)
-    class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
-
+    class_weights = torch.tensor([1.0, 1.5]).to(device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     best_f1 = 0.0
@@ -133,8 +116,12 @@ def train_model(model, trainLoader, testLoader, device, epochs=25, lr=0.0001):
             x, y = x.to(device), y.to(device)
             optimizer.zero_grad()
             yHat = model(x)
-            loss = criterion(yHat, y)
+
+            pred_probs = F.softmax(yHat, dim=1)[:,1]
+            imbalance_penalty = torch.abs(pred_probs.mean() - 0.5)
+            loss = criterion(yHat, y) + 0.5 * imbalance_penalty
             loss.backward()
+
             optimizer.step()
             total_loss += loss.item()
         avg_loss = total_loss / len(trainLoader)
@@ -148,7 +135,8 @@ def train_model(model, trainLoader, testLoader, device, epochs=25, lr=0.0001):
                 x, y = x.to(device), y.to(device)
                 yHat = model(x)
                 probs = F.softmax(yHat, dim=1)
-                preds = torch.argmax(yHat, dim=1)
+                threshold = 0.8
+                preds = (probs[:,1] >= threshold).long()
 
                 all_probs.extend(probs[:,1].cpu().numpy())
                 all_preds.extend(preds.cpu().numpy())
