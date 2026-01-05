@@ -100,6 +100,9 @@ def summarySave(finalLoss, model):
     torch.save(model.state_dict(), "modelSave.pth")
     print('Model Saved!')
 
+def sigmoid(x):
+    return 1/(1+np.exp(-x))
+
 # This is the main training and evaluation loop
 def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.001):
     # Compute class weights based on training labels
@@ -117,9 +120,13 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.001):
             optimizer.zero_grad()
             yHat = model(x)
 
-            pred_probs = F.softmax(yHat, dim=1)[:,1]
-            imbalance_penalty = torch.abs(pred_probs.mean() - 0.5)
-            loss = criterion(yHat, y) + 0.5 * imbalance_penalty
+            # Struggling to distinguish between classes, guessing all 1, so trying to seperate the classes more by rewarding wide distinctions
+            logits = yHat 
+            separation = torch.abs(logits[:, 0] - logits[:, 1])
+            margin = 10.0
+            separation_penalty = torch.clamp(margin - separation, min=0)
+
+            loss = criterion(logits, y) + 0.5 * separation_penalty.mean()
             loss.backward()
 
             optimizer.step()
