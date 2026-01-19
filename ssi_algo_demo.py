@@ -13,13 +13,54 @@ def shape_traverse(shape):
     The main algorithm, inputs are the nodes and their connections
     Output is path of traversal for each instance of each node
     """
-    # Step 1, generating a dict of how far away each node is from the end, assuming first and last entry is first and last node
+    # Step 1, generating a array of how far away each node is from the end, assuming first and last entry is entry and exit node respectively 
     start_node = 0 
     end_node = len(shape)-1
-    distance = generate_distance(start_node, end_node, shape)
+    distance = generate_distance(end_node, shape)
 
-def generate_distance(start_node, end_node, shape):
-    distance = 
+    # Step 2, generating all legal paths an instance could take to reach the end with recursion
+    legal_paths = generate_paths(shape, distance, start_node, end_node, list())
+    print(legal_paths)
+    exit()
+
+def generate_paths(shape, distance, current_node, end_node, all_paths):
+    """
+    Generates each possible path where the end is reached by repeating no nodes and not going backward (or allowing 1 backward depending)
+    Generates recursively
+    """
+    print(current_node)
+    nextNodes = shape[current_node]
+    for node in nextNodes:
+        if distance[node] == 0:
+            return node
+        if distance[node] <= distance[current_node]:
+            return generate_paths(shape, distance, node, end_node, all_paths)
+    return all_paths
+    
+
+def generate_distance(end_node, shape):
+    """
+    Algorithm to determine how far each node is from the exit node 
+    Exit node is assumed to be the last node in the shape data structure
+    """
+    distance = np.full((end_node+1), end_node+1)
+    toVisit = np.array([], dtype=int)
+    currentNode = end_node
+    currentVisitIndex = 0
+
+    distance[end_node] = 0 # Setting initial value of exit node
+    while end_node+1 in distance:
+        for connectionNode in shape[currentNode]:
+            if distance[connectionNode] == end_node+1: 
+                # adding distance to list
+                distance[connectionNode] = distance[currentNode]+1
+                # adding node to list to check next
+                toVisit = np.append(toVisit, connectionNode)
+        currentNode = toVisit[currentVisitIndex]
+        currentVisitIndex += 1
+
+    return distance 
+
 
 
 def plot_3d_graph(connection_dict, filename="cube_graph.png"):
