@@ -13,6 +13,8 @@ from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from sklearn.metrics import f1_score, confusion_matrix, accuracy_score
 import os
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # Some global variables for model training analysis
@@ -60,22 +62,24 @@ def standardise(trainingPathExo, testingPathExo):
     :param testingPathExo: path to testing data csv
     """
 
-    trainDF = pd.read_csv(trainingPathExo).drop(columns="CustomerID")
-    testDF = pd.read_csv(testingPathExo).drop(columns="CustomerID")
+    trainDF = pd.read_csv(trainingPathExo).drop(columns="Patient_ID")
+    testDF = pd.read_csv(testingPathExo).drop(columns="Patient_ID")
     print(testDF.head())
 
-    # Replacement maps for onehot encoding
-    Gender_map = {'Male':1, 'Female':2}
-    Subscription_Type_map = {'Basic':1, 'Standard':2, 'Premium':3}
-    Contract_Length_map = {'Monthly':1, 'Annual':2, 'Quarterly':3}
+    # Replacement maps for onehot encoding if required
+    oneHotRequired = False
+    if oneHotRequired:
+        Gender_map = {'Male':1, 'Female':2}
+        Subscription_Type_map = {'Basic':1, 'Standard':2, 'Premium':3}
+        Contract_Length_map = {'Monthly':1, 'Annual':2, 'Quarterly':3}
 
-    # Actually replacing
-    trainDF['Gender'] = trainDF['Gender'].replace(Gender_map)
-    trainDF['Subscription Type'] = trainDF['Subscription Type'].replace(Subscription_Type_map)
-    trainDF['Contract Length'] = trainDF['Contract Length'].replace(Contract_Length_map)
-    testDF['Gender'] = testDF['Gender'].replace(Gender_map)
-    testDF['Subscription Type'] = testDF['Subscription Type'].replace(Subscription_Type_map)
-    testDF['Contract Length'] = testDF['Contract Length'].replace(Contract_Length_map)
+        # Actually replacing
+        trainDF['Gender'] = trainDF['Gender'].replace(Gender_map)
+        trainDF['Subscription Type'] = trainDF['Subscription Type'].replace(Subscription_Type_map)
+        trainDF['Contract Length'] = trainDF['Contract Length'].replace(Contract_Length_map)
+        testDF['Gender'] = testDF['Gender'].replace(Gender_map)
+        testDF['Subscription Type'] = testDF['Subscription Type'].replace(Subscription_Type_map)
+        testDF['Contract Length'] = testDF['Contract Length'].replace(Contract_Length_map)
 
     # Dropping Nan rows
     testDF.dropna(inplace=True)
@@ -83,11 +87,11 @@ def standardise(trainingPathExo, testingPathExo):
 
     # Standardising
     scaler = StandardScaler()
-    scaler.fit(trainDF.drop(columns=['Churn']))
-    xTrain = scaler.transform(trainDF.drop(columns=['Churn']))
-    xTest = scaler.transform(testDF.drop(columns=['Churn']))
-    yTrain = trainDF['Churn'].values
-    yTest = testDF['Churn'].values
+    scaler.fit(trainDF.drop(columns=['Heart_Disease_Risk']))
+    xTrain = scaler.transform(trainDF.drop(columns=['Heart_Disease_Risk']))
+    xTest = scaler.transform(testDF.drop(columns=['Heart_Disease_Risk']))
+    yTrain = trainDF['Heart_Disease_Risk'].values
+    yTest = testDF['Heart_Disease_Risk'].values
 
 
     #print("Class distribution (train):", np.bincount(yTrain))
@@ -104,7 +108,7 @@ def sigmoid(x):
     return 1/(1+np.exp(-x))
 
 # This is the main training and evaluation loop
-def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.001):
+def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.002):
     # Compute class weights based on training labels
     class_weights = torch.tensor([1.0, 1.5]).to(device)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
@@ -120,13 +124,13 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.001):
             optimizer.zero_grad()
             yHat = model(x)
 
-            # Struggling to distinguish between classes, guessing all 1, so trying to seperate the classes more by rewarding wide distinctions
+            # Struggling to distinguish between classes, guessing all 1, so trying to seperate the classes more by rewarding wide distinctions.
             logits = yHat 
             separation = torch.abs(logits[:, 0] - logits[:, 1])
             margin = 10.0
             separation_penalty = torch.clamp(margin - separation, min=0)
 
-            loss = criterion(logits, y) + 0.5 * separation_penalty.mean()
+            loss = criterion(logits, y) + 0.4 * separation_penalty.mean()
             loss.backward()
 
             optimizer.step()
@@ -212,6 +216,12 @@ def plot_training_metrics():
     plt.grid(True)
 
     plt.tight_layout()
+
+    cwd = os.getcwd()  # get current working directory
+    save_path = os.path.join(cwd, "training_metrics.png")
+    plt.savefig(save_path)
+    print(f"Plot saved to: {save_path}")
+
     plt.show()
 
 # The main loop of the program 
@@ -223,8 +233,8 @@ def main():
     print("Using device:", device)
   
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    trainingDataPath = os.path.join(base_dir, "Data", "churn_data", "customer_churn_dataset-training-master.csv")
-    testingDataPath = os.path.join(base_dir, "Data", "churn_data", "customer_churn_dataset-testing-master.csv")
+    trainingDataPath = os.path.join(base_dir, "Data", "heart_data", "heart_train.csv")
+    testingDataPath = os.path.join(base_dir, "Data", "heart_data", "heart_test.csv")
 
     # First, standardising data, function returns 4 lists, all standardised.
     xTrain, xTest, yTrain, yTest = standardise(trainingDataPath, testingDataPath)
