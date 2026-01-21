@@ -17,26 +17,60 @@ def shape_traverse(shape):
     start_node = 0 
     end_node = len(shape)-1
     distance = generate_distance(end_node, shape)
+    print('distrance =',distance)
 
     # Step 2, generating all legal paths an instance could take to reach the end with recursion
     legal_paths = generate_paths(shape, distance, start_node, end_node, list())
+    print('Legal Paths ---------------')
     print(legal_paths)
     exit()
 
 def generate_paths(shape, distance, current_node, end_node, all_paths):
     """
-    Generates each possible path where the end is reached by repeating no nodes and not going backward (or allowing 1 backward depending)
+    Generates each possible path where the end is reached by repeating no nodes and not going backward (or allowing 1 backward depending, not for this version of the function)
     Generates recursively
     """
-    print(current_node)
+    # Adding the root path if needed
+    if len(all_paths) > 1 and all_paths[-1] == 0 and distance[current_node] != np.max(distance)-1:
+                to_append = []
+                current_root = current_node
+                target_distance = np.max(distance)-1
+                while distance[current_root] != target_distance:
+                    for index in range(len(all_paths) - 1, -1, -1):
+                        tmp_root = all_paths[index]
+                        if distance[tmp_root] == distance[current_root]+1:
+                            to_append.append(tmp_root)
+                            current_root = tmp_root
+                            break
+                all_paths.extend(to_append)               
+
+    # Iterating over all connected nodes to the last node
+    all_paths.append(current_node)
     nextNodes = shape[current_node]
     for node in nextNodes:
+        # If node is the last node, add node to list and return the list
         if distance[node] == 0:
-            return node
+            all_paths.extend([node, 0])
+            return all_paths
+        # If the node is not the last node, add current node to list and then call again
         if distance[node] <= distance[current_node]:
-            return generate_paths(shape, distance, node, end_node, all_paths)
+            # adding root nodes that are required, note, the 1 should be made more flexible, currently only works when all paths are length 3 I think
+            all_paths = generate_paths(shape, distance, node, end_node, all_paths)
+    # Converting list of nodes into list of paths
+    #all_paths = clean_paths(shape, distance, all_paths)
     return all_paths
-    
+
+def clean_paths(shape, distance, all_paths):
+    clean_paths = []
+    print('og', all_paths)
+    for i in all_paths:
+        if i == 0:
+            clean_paths.append([0])
+            continue
+        clean_paths[-1].append(i)
+    print(all_paths)
+    exit()    
+    return clean_paths
 
 def generate_distance(end_node, shape):
     """
