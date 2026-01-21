@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import os
+from matplotlib import animation
 
 
 def shape_traverse(shape):
@@ -17,60 +18,37 @@ def shape_traverse(shape):
     start_node = 0 
     end_node = len(shape)-1
     distance = generate_distance(end_node, shape)
-    print('distrance =',distance)
 
     # Step 2, generating all legal paths an instance could take to reach the end with recursion
-    legal_paths = generate_paths(shape, distance, start_node, end_node, list())
-    print('Legal Paths ---------------')
+    legal_paths = generate_paths(shape, start_node, end_node)
     print(legal_paths)
-    exit()
+    return legal_paths
 
-def generate_paths(shape, distance, current_node, end_node, all_paths):
+def generate_paths(graph, start, end):
     """
-    Generates each possible path where the end is reached by repeating no nodes and not going backward (or allowing 1 backward depending, not for this version of the function)
-    Generates recursively
+    Implimentation of simple backtrack DFS Algo
+    Gets all simple paths of all lengths with  no repeating nodes
     """
-    # Adding the root path if needed
-    if len(all_paths) > 1 and all_paths[-1] == 0 and distance[current_node] != np.max(distance)-1:
-                to_append = []
-                current_root = current_node
-                target_distance = np.max(distance)-1
-                while distance[current_root] != target_distance:
-                    for index in range(len(all_paths) - 1, -1, -1):
-                        tmp_root = all_paths[index]
-                        if distance[tmp_root] == distance[current_root]+1:
-                            to_append.append(tmp_root)
-                            current_root = tmp_root
-                            break
-                all_paths.extend(to_append)               
 
-    # Iterating over all connected nodes to the last node
-    all_paths.append(current_node)
-    nextNodes = shape[current_node]
-    for node in nextNodes:
-        # If node is the last node, add node to list and return the list
-        if distance[node] == 0:
-            all_paths.extend([node, 0])
-            return all_paths
-        # If the node is not the last node, add current node to list and then call again
-        if distance[node] <= distance[current_node]:
-            # adding root nodes that are required, note, the 1 should be made more flexible, currently only works when all paths are length 3 I think
-            all_paths = generate_paths(shape, distance, node, end_node, all_paths)
-    # Converting list of nodes into list of paths
-    #all_paths = clean_paths(shape, distance, all_paths)
+    all_paths = []
+
+    def backtrack(current_node, visited, current_path):
+        if current_node == end:
+            all_paths.append(current_path.copy())
+            return
+        
+        for neighbor in graph[current_node]:
+            if neighbor not in visited:
+                visited.add(neighbor)
+                current_path.append(neighbor)
+
+                backtrack(neighbor, visited, current_path)
+
+                current_path.pop()
+                visited.remove(neighbor)
+
+    backtrack(start, {start}, [start])
     return all_paths
-
-def clean_paths(shape, distance, all_paths):
-    clean_paths = []
-    print('og', all_paths)
-    for i in all_paths:
-        if i == 0:
-            clean_paths.append([0])
-            continue
-        clean_paths[-1].append(i)
-    print(all_paths)
-    exit()    
-    return clean_paths
 
 def generate_distance(end_node, shape):
     """
@@ -96,10 +74,9 @@ def generate_distance(end_node, shape):
     return distance 
 
 
-
-def plot_3d_graph(connection_dict, filename="cube_graph.png"):
+def animate_paths_3d(connection_dict, paths, filename="paths.gif", interval=800):
     """
-    Visualises the connections of the cubes
+    Animates paths one-by-one and saves as a GIF
     """
 
     coords = {
@@ -108,39 +85,67 @@ def plot_3d_graph(connection_dict, filename="cube_graph.png"):
     }
 
     fig = plt.figure(figsize=(7,7))
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
 
-    for i, (x,y,z) in coords.items():
-        ax.scatter(x, y, z)
-        ax.text(x, y, z, f"{i}", size=10)
+    def draw_base():
+        ax.clear()
 
-    drawn = set()
-    for src, targets in connection_dict.items():
-        for tgt in targets:
-            edge = tuple(sorted((src, tgt)))
-            if edge in drawn:
-                continue
-            drawn.add(edge)
+        for i, (x,y,z) in coords.items():
+            ax.scatter(x, y, z, color="black")
+            ax.text(x, y, z, f"{i}", size=10)
 
-            x = [coords[src][0], coords[tgt][0]]
-            y = [coords[src][1], coords[tgt][1]]
-            z = [coords[src][2], coords[tgt][2]]
+        drawn = set()
+        for src, targets in connection_dict.items():
+            for tgt in targets:
+                edge = tuple(sorted((src, tgt)))
+                if edge in drawn:
+                    continue
+                drawn.add(edge)
 
-            ax.plot(x, y, z)
+                x = [coords[src][0], coords[tgt][0]]
+                y = [coords[src][1], coords[tgt][1]]
+                z = [coords[src][2], coords[tgt][2]]
 
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-    ax.set_title("3D Node Connectivity")
+                ax.plot(x, y, z, color="lightgrey", linewidth=1)
 
-    ax.set_box_aspect([1,1,1])
-    plt.tight_layout()
+        ax.set_box_aspect([1,1,1])
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        ax.set_title("Animating Paths")
+
+    cmap = plt.cm.get_cmap("tab10", len(paths))
+
+    def update(frame):
+        draw_base()
+
+        for i in range(frame + 1):
+            color = cmap(i)
+            path = paths[i]
+
+            for a, b in zip(path[:-1], path[1:]):
+                x = [coords[a][0], coords[b][0]]
+                y = [coords[a][1], coords[b][1]]
+                z = [coords[a][2], coords[b][2]]
+
+                ax.plot(x, y, z, color=color, linewidth=3)
+
+        ax.set_title(f"Path {frame+1}/{len(paths)}")
+
+    anim = animation.FuncAnimation(
+        fig,
+        update,
+        frames=len(paths),
+        interval=interval,
+        repeat=False
+    )
 
     save_path = os.path.join(os.getcwd(), filename)
-    plt.savefig(save_path, dpi=200)
+    anim.save(save_path, writer="pillow", dpi=150)
     plt.close()
 
-    print(f"Graph saved to: {save_path}")
+    print(f"Animation saved to: {save_path}")
+
 
 def main():
     """
@@ -156,7 +161,7 @@ def main():
         6:[2,4,7],
         7:[3,5,6]
     }
-    plot_3d_graph(shape)
-    shape_traverse(shape)
+    paths = shape_traverse(shape)
+    animate_paths_3d(shape, paths)
 
 main()

@@ -1,0 +1,19 @@
+def generate_paths(graph, start, end):
+    all_paths = []
+
+    def backtrack(current_node, visited, current_path):
+        if current_node == end:
+            all_paths.append(current_path.copy())
+            return
+        
+        for neighbor in graph[current_node]:
+            if neighbor not in visited:
+                visited.add(neighbor)
+                current_path.append(neighbor)
+
+                backtrack(neighbor, visited, current_path)
+
+                current_path.pop()
+                visited.remove(neighbor)
+
+    backtrack(start, {start}, [start])

@@ -77,3 +77,12 @@ From this, there are two 3D implimentations I plan to try:
 2. The implimentation where I have treat the shape (or multiple chained together) as the entire layer (e.g. the same input goes to the red and green nodes in the above picture) will be called the "Traditional Implimentation (TI)"
 
 ## Super Sub Implimentation
+
+# Proof of concept
+The initial proof of concept algorithm is shown in [ssi_algo_demo.py](ssi_algo_demo.py).
+
+This uses a backtrack DFS algorithm to collect all paths from the chosen graph. These can then be filtered. 
+
+Below is a gif on the paths the algorithm generated for the graph I made, which is currently a cube. 
+
+![POC GIF](Pictures/paths.gif "Proof of Concept SSI")
