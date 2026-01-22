@@ -29,6 +29,11 @@ class EdgesModule(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.edge = nn.Linear(dim,dim)
+
+        # Initiialisation to fix exploding/vanishing gradients
+        nn.init.xavier_uniform_(self.edge.weight, gain=nn.init.calculate_gain('relu'))
+        nn.init.zeros_(self.edge.bias)
+
         
     def forward(self, x):
         input = self.edge(x)
@@ -48,7 +53,7 @@ class GraphModule(nn.Module):
         self.dim = dim
         # Generating all paths from graph
         self.all_paths = self.generate_paths(graph, self.entry_node, self.exit_node)
-        self.norm = nn.LayerNorm(dim)
+        self.norm = nn.BatchNorm1d(dim)
 
         # Making all the edge objects
         self.edges = nn.ModuleDict()
@@ -61,6 +66,7 @@ class GraphModule(nn.Module):
     def forward(self, x):
         # Creatintg structure to hold the outputs of each node
         node_outputs = {}
+        node_counts = {}
         node_outputs[self.entry_node] = x
 
         # Iteratinf over all paths
@@ -73,13 +79,17 @@ class GraphModule(nn.Module):
                 edge_out = self.edges[key].forward(prev_out)
                 if node not in node_outputs:
                     node_outputs[node] = edge_out
+                    node_counts[node] = 1
                 # Else if edge has been used before
                 else:
                     node_outputs[node] = node_outputs[node] + edge_out
+                    node_counts[node] += 1
                 inital_node = node
         
         # Normalising and returning the final output node
-        return self.norm(node_outputs[self.exit_node])
+        exit_output = node_outputs[self.exit_node] / node_counts[self.exit_node]
+        return self.norm(exit_output)
+
     
     def generate_paths(self, graph, start, end):
         all_paths = []
@@ -239,6 +249,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
     best_f1 = 0.0
 
     for epoch in range(epochs):
+        count = 0
         # --- Training ---
         model.train()
         total_loss = 0
@@ -246,7 +257,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
             x, y = x.to(device), y.to(device)
             optimizer.zero_grad()
             yHat = model(x)
-            #print(f"Logits mean: {yHat.mean(dim=0)}, std: {yHat.std(dim=0)}")
+            if count%100 == 0: print(f"Logits mean: {yHat.mean(dim=0)}, std: {yHat.std(dim=0)}")
 
             # Struggling to distinguish between classes, guessing all 1, so trying to seperate the classes more by rewarding wide distinctions.
             logits = yHat 
@@ -255,10 +266,13 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
             separation_penalty = torch.clamp(margin - separation, min=0)
 
             loss = criterion(logits, y) + 0.0 * separation_penalty.mean()
-            loss.backward()
 
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+
             total_loss += loss.item()
+            count += 1
         avg_loss = total_loss / len(trainLoader)
         print(f"Epoch {epoch+1} training loss: {avg_loss:.4f}")
 
@@ -373,7 +387,7 @@ def main():
     print('Datasets created...')
 
     # Creating dataloader object 
-    batchSize = 16
+    batchSize = 32
     trainLoader = DataLoader(trainDataset, batch_size=batchSize, shuffle=True)
     testLoader = DataLoader(testDataset, batch_size=batchSize, shuffle=False)
     print('Dataloaders created...')
@@ -391,7 +405,7 @@ def main():
     }
     dim = 8
 
-    model = SuperModule(graph, dim, 6, 6, xTrain.shape[1], 2)
+    model = SuperModule(graph, dim, 8, 6, xTrain.shape[1], 2)
     print(f"Number of paths found: {len(model.layers[0].vertical_layers[0].all_paths)}")
     print(f"Paths: {model.layers[0].vertical_layers[0].all_paths}")
     model.to(device)
