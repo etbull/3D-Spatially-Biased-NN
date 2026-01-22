@@ -86,3 +86,13 @@ This uses a backtrack DFS algorithm to collect all paths from the chosen graph. 
 Below is a gif on the paths the algorithm generated for the graph I made, which is currently a cube. 
 
 ![POC GIF](Pictures/paths.gif "Proof of Concept SSI")
+
+# Basic Implimentation
+The basic implimentation of this idea is stored in [customnn_module.py](SuberSub_Implimentation/custom_nn_module.py).
+
+This creates 4 custom nn.Modules. 
+
+1. ```EdgesModule``` defines edges as linear neurons.
+2. ```GraphModule```  defines model where input goes into graph, is calculated along several paths, normalised, and outputed. It contains the ssi_algo_demo implimentation
+3. ```GraphLayer``` stacks Graphs vertically, they all get the same input
+4. ```SuperLayer``` connects together multiple graphLayers

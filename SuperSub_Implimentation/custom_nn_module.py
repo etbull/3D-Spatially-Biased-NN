@@ -17,11 +17,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import torch.optim as optim
+from sklearn.metrics import f1_score, confusion_matrix, accuracy_score
 
-# Some global variables for model training analysis
-accuracy_list = []
-loss_list = []
-f1_list = []
+
 
 """
 EdgesModule defines edges as linear neurons
@@ -124,34 +122,45 @@ class GraphLayer(nn.Module):
 SuperModule connects together multiple graphLayers.
 """
 class SuperModule(nn.Module):
-    def __init__(self, graph, dim, width, depth):
+    def __init__(self, graph, dim, width, depth, input_dim, output_classes):
         super().__init__()
         self.width = width
         self.depth = depth
 
-        # Creating multiple layers of the same width
+        # First Layer
+        self.input_layer = nn.Linear(input_dim, dim)
+
+        # Graph layers
         self.layers = nn.ModuleList(
-            [GraphLayer(graph, dim, width) for i in range(depth-1)]
+            [GraphLayer(graph, dim, width) for _ in range(depth)]
         )
-        
-        # Creating the connections which will densely connect these layers together
+
+        # Connectors between layers (depth - 1)
         self.connectors = nn.ModuleList(
-            [nn.Linear(width*dim, dim) for i in range(depth-1)]
+            [nn.Linear(width * dim, dim) for _ in range(depth - 1)]
         )
+
+        # Final classifier
+        self.classifier = nn.Linear(dim, output_classes)
 
     def forward(self, x):
-        # Iterating over each layer 
-        for layer in range(self.depth-1):
-            output = self.layers[layer](x)
+        x = self.input_layer(x)
 
-            # If layer not last layer, 
-            if layer < len(self.connectors):
-                x = torch.cat(output, dim=-1)  # Puts all output vectors from each graph in each layer into one big vector
-                x = self.connectors[layer](x)  # Connects this vector 
-            # If layer last layer, get the mean of all outputs from the last layer
+        for layer in range(self.depth):
+            output = self.layers[layer](x)  # list of [B, dim]
+
+            if layer < self.depth - 1:
+                # Dense connection to next layer
+                x = torch.cat(output, dim=-1)      # [B, width*dim]
+                x = self.connectors[layer](x)      # [B, dim]
             else:
-                x = torch.stack(output).mean(0)
+                # Final layer: aggregate graphs
+                x = torch.stack(output).mean(0)    # [B, dim]
+
+        # Binary classification head
+        x = self.classifier(x)                     # [B, 1]
         return x
+
 
 
 
@@ -166,14 +175,14 @@ graph = {
         7:[3,5,6]
     }
 
-dim = 4
-model = SuperModule(graph, dim, 3, 2)
+dim = 8
+model = SuperModule(graph, dim, 6, 4, 1, 2)
 
 # ------------------------
 # Training setup
 # ------------------------
 
-criterion = nn.MSELoss()
+criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 # ------------------------
@@ -181,8 +190,8 @@ optimizer = optim.Adam(model.parameters(), lr=1e-3)
 # ------------------------
 
 def make_batch(batch_size=32):
-    x = torch.randn(batch_size, dim)
-    y = 2 * x
+    x = torch.randn(batch_size, 1)
+    y = (x.sum(dim=1) > 0).long()
     return x, y
 
 # ------------------------
@@ -200,5 +209,20 @@ for epoch in range(epochs):
     loss.backward()
     optimizer.step()
 
-    if epoch % 100 == 0:
+    if epoch % 10 == 0:
         print(f"Epoch {epoch:4d} | Loss: {loss.item():.6f}")
+
+# ------------------------
+# Testing loop
+# ------------------------
+x, y = make_batch()
+with torch.no_grad():
+    yHat = model(x)
+    loss = criterion(yHat, y)
+
+    probs = torch.sigmoid(yHat)
+    preds = (probs > 0.5).int()
+    accuracy = accuracy_score(y, preds)
+
+print(accuracy, loss)
+
