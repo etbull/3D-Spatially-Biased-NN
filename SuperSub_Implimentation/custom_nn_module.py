@@ -51,6 +51,7 @@ class GraphModule(nn.Module):
         self.dim = dim
         # Generating all paths from graph
         self.all_paths = self.generate_paths(graph, self.entry_node, self.exit_node)
+        self.norm = nn.LayerNorm(dim)
 
         # Making all the edge objects
         self.edges = nn.ModuleDict()
@@ -77,7 +78,7 @@ class GraphModule(nn.Module):
                     node_outputs[node] = node_outputs[node] + edge_out
                 inital_node = node
         
-        return node_outputs[self.exit_node]
+        return self.norm(node_outputs[self.exit_node])
     
     def generate_paths(self, graph, start, end):
         all_paths = []
@@ -99,6 +100,43 @@ class GraphModule(nn.Module):
 
         backtrack(start, {start}, [])
         return all_paths
+    
+class GraphLayer(nn.Module):
+    def __init__(self, graph, dim, num_layers):
+        super().__init__()
+        self.vertical_layers = nn.ModuleList(
+            [GraphModule(graph, dim) for i in range(num_layers)]
+        )
+        
+    def forward(self, x):
+        output = [g(x) for g in self.vertical_layers]
+        return output
+    
+class SuperModule(nn.Module):
+    def __init__(self, graph, dim, width, depth):
+        super().__init__()
+        self.width = width
+        self.depth = depth
+
+        self.layers = nn.ModuleList(
+            [GraphLayer(graph, dim, width) for i in range(depth-1)]
+        )
+        
+        self.connectors = nn.ModuleList(
+            [nn.Linear(width*dim, dim) for i in range(depth-1)]
+        )
+
+    def forward(self, x):
+        for layer in range(self.depth-1):
+            output = self.layers[layer](x)
+
+            if layer < len(self.connectors):
+                x = torch.cat(output, dim=-1)
+                x = self.connectors[layer](x)
+            else:
+                x = torch.stack(output).mean(0)
+        return x
+
 
 
 graph = {
@@ -113,7 +151,7 @@ graph = {
     }
 
 dim = 4
-model = GraphModule(graph, dim)
+model = SuperModule(graph, dim, 3, 2)
 
 # ------------------------
 # Training setup
