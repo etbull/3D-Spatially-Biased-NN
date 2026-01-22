@@ -24,12 +24,7 @@ loss_list = []
 f1_list = []
 
 """
-This model should
-1. Define the graphs
-2. Define the paths to take
-3. Make an edge nn.Module to track the edges
-4. Make a graph.nn module to track the nodes
-5. Create a super.nn module to combine multiple graphs together
+EdgesModule defines edges as linear neurons
 """
 class EdgesModule(nn.Module):
     def __init__(self, dim):
@@ -41,10 +36,13 @@ class EdgesModule(nn.Module):
         output = nn.functional.relu(input)
         return output
     
-
+"""
+Graph Module defines model where input goes into graph, is calculated along several paths, normalised, and outputed
+"""
 class GraphModule(nn.Module):
     def __init__(self, graph, dim):
         super().__init__()
+        # Defining important stuff like the graph dict, the entry and exit node, and how many dimensions in the input data
         self.graph = graph
         self.entry_node = list(graph.keys())[0]
         self.exit_node = list(graph.keys())[-1]
@@ -55,20 +53,23 @@ class GraphModule(nn.Module):
 
         # Making all the edge objects
         self.edges = nn.ModuleDict()
+        # Iterating over the pairs of nodes and list of connected nodes, creating an edge object for each edge and adding to dict
         for src, dsts in self.graph.items():
             for dst in dsts:                
                 key = f"{src}-{dst}"
                 self.edges[key] = EdgesModule(self.dim)
         
     def forward(self, x):
+        # Creatintg structure to hold the outputs of each node
         node_outputs = {}
         node_outputs[self.entry_node] = x
 
+        # Iteratinf over all paths
         for paths in self.all_paths:
             inital_node = self.entry_node
             for node in paths:
                 key = f"{inital_node}-{node}"
-                # Logic for if the edge hasn't been touched yet
+                # Logic for if the edge hasn't been touched yet, adding the result to the dictionary
                 prev_out = node_outputs[inital_node]
                 edge_out = self.edges[key].forward(prev_out)
                 if node not in node_outputs:
@@ -78,11 +79,12 @@ class GraphModule(nn.Module):
                     node_outputs[node] = node_outputs[node] + edge_out
                 inital_node = node
         
+        # Normalising and returning the final output node
         return self.norm(node_outputs[self.exit_node])
     
     def generate_paths(self, graph, start, end):
         all_paths = []
-
+        # Using simple backtrack DFS algo to get all possible paths
         def backtrack(current_node, visited, current_path):
             if current_node == end:
                 all_paths.append(current_path.copy())
@@ -99,40 +101,54 @@ class GraphModule(nn.Module):
                     visited.remove(neighbor)
 
         backtrack(start, {start}, [])
+        # Could filter paths here in the future if wanted, e.g, only getting smallest path, or a random path
         return all_paths
     
+"""
+GraphLayer stacks Graphs vertically, they all get the same input
+"""
 class GraphLayer(nn.Module):
     def __init__(self, graph, dim, num_layers):
         super().__init__()
+        # Adding multiple graphs to one layer
         self.vertical_layers = nn.ModuleList(
             [GraphModule(graph, dim) for i in range(num_layers)]
         )
         
     def forward(self, x):
+        # This ensures that all graphs get the same intput. For densely connected network
         output = [g(x) for g in self.vertical_layers]
         return output
     
+"""
+SuperModule connects together multiple graphLayers.
+"""
 class SuperModule(nn.Module):
     def __init__(self, graph, dim, width, depth):
         super().__init__()
         self.width = width
         self.depth = depth
 
+        # Creating multiple layers of the same width
         self.layers = nn.ModuleList(
             [GraphLayer(graph, dim, width) for i in range(depth-1)]
         )
         
+        # Creating the connections which will densely connect these layers together
         self.connectors = nn.ModuleList(
             [nn.Linear(width*dim, dim) for i in range(depth-1)]
         )
 
     def forward(self, x):
+        # Iterating over each layer 
         for layer in range(self.depth-1):
             output = self.layers[layer](x)
 
+            # If layer not last layer, 
             if layer < len(self.connectors):
-                x = torch.cat(output, dim=-1)
-                x = self.connectors[layer](x)
+                x = torch.cat(output, dim=-1)  # Puts all output vectors from each graph in each layer into one big vector
+                x = self.connectors[layer](x)  # Connects this vector 
+            # If layer last layer, get the mean of all outputs from the last layer
             else:
                 x = torch.stack(output).mean(0)
         return x
