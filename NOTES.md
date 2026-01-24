@@ -96,3 +96,19 @@ This creates 4 custom nn.Modules.
 2. ```GraphModule```  defines model where input goes into graph, is calculated along several paths, normalised, and outputed. It contains the ssi_algo_demo implimentation
 3. ```GraphLayer``` stacks Graphs vertically, they all get the same input
 4. ```SuperLayer``` connects together multiple graphLayers
+
+The output from the first attempt of this model with 10 epochs was:
+
+```
+Epoch 10 training loss: 0.5371
+Top positive probs in this epoch: [0.9467758  0.9468682  0.9503929  0.9530409  0.95535356]
+True positives: 275 / 440
+Test Accuracy: 0.7345, F1-score: 0.6740
+Confusion Matrix:
+[[461 101]
+ [165 275]]
+```
+
+![Training figure 1](Pictures/training_metrics_1.png "Training figure 1")
+
+Just to confirm the model was accurately learning, I increased the lr from 0.00075 to 0.0005. I changed epochs from 10 t 50. 

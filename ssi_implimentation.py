@@ -88,7 +88,7 @@ class GraphModule(nn.Module):
         
         # Normalising and returning the final output node
         exit_output = node_outputs[self.exit_node] / node_counts[self.exit_node]
-        return self.norm(exit_output)
+        return self.norm(exit_output+x) # Adding residual connection
 
     
     def generate_paths(self, graph, start, end):
@@ -405,7 +405,7 @@ def main():
     }
     dim = 8
 
-    model = SuperModule(graph, dim, 10, 8, xTrain.shape[1], 2)
+    model = SuperModule(graph, dim, 5, 4, xTrain.shape[1], 2)
     print(f"Number of paths found: {len(model.layers[0].vertical_layers[0].all_paths)}")
     print(f"Paths: {model.layers[0].vertical_layers[0].all_paths}")
     model.to(device)
