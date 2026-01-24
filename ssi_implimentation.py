@@ -405,7 +405,7 @@ def main():
     }
     dim = 8
 
-    model = SuperModule(graph, dim, 8, 6, xTrain.shape[1], 2)
+    model = SuperModule(graph, dim, 10, 8, xTrain.shape[1], 2)
     print(f"Number of paths found: {len(model.layers[0].vertical_layers[0].all_paths)}")
     print(f"Paths: {model.layers[0].vertical_layers[0].all_paths}")
     model.to(device)
