@@ -16,6 +16,7 @@ import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from sklearn.ensemble import RandomForestClassifier
 
 # Some global variables for model training analysis
 accuracy_list = []
@@ -201,24 +202,19 @@ def standardise(trainingPathExo, testingPathExo):
     :param testingPathExo: path to testing data csv
     """
 
-    trainDF = pd.read_csv(trainingPathExo).drop(columns="Patient_ID")
-    testDF = pd.read_csv(testingPathExo).drop(columns="Patient_ID")
+    trainDF = pd.read_csv(trainingPathExo).drop(columns="id")
+    testDF = pd.read_csv(testingPathExo).drop(columns="id")
     print(testDF.head())
 
     # Replacement maps for onehot encoding if required
-    oneHotRequired = False
+    oneHotRequired = True
     if oneHotRequired:
-        Gender_map = {'Male':1, 'Female':2}
-        Subscription_Type_map = {'Basic':1, 'Standard':2, 'Premium':3}
-        Contract_Length_map = {'Monthly':1, 'Annual':2, 'Quarterly':3}
+        outcome_map = {'M':1, 'B':0}
 
         # Actually replacing
-        trainDF['Gender'] = trainDF['Gender'].replace(Gender_map)
-        trainDF['Subscription Type'] = trainDF['Subscription Type'].replace(Subscription_Type_map)
-        trainDF['Contract Length'] = trainDF['Contract Length'].replace(Contract_Length_map)
-        testDF['Gender'] = testDF['Gender'].replace(Gender_map)
-        testDF['Subscription Type'] = testDF['Subscription Type'].replace(Subscription_Type_map)
-        testDF['Contract Length'] = testDF['Contract Length'].replace(Contract_Length_map)
+        trainDF['diagnosis'] = trainDF['diagnosis'].map(outcome_map)
+        testDF['diagnosis'] = testDF['diagnosis'].map(outcome_map)
+
 
     # Dropping Nan rows
     testDF.dropna(inplace=True)
@@ -226,11 +222,11 @@ def standardise(trainingPathExo, testingPathExo):
 
     # Standardising
     scaler = StandardScaler()
-    scaler.fit(trainDF.drop(columns=['Heart_Disease_Risk']))
-    xTrain = scaler.transform(trainDF.drop(columns=['Heart_Disease_Risk']))
-    xTest = scaler.transform(testDF.drop(columns=['Heart_Disease_Risk']))
-    yTrain = trainDF['Heart_Disease_Risk'].values
-    yTest = testDF['Heart_Disease_Risk'].values
+    scaler.fit(trainDF.drop(columns=['diagnosis']))
+    xTrain = scaler.transform(trainDF.drop(columns=['diagnosis']))
+    xTest = scaler.transform(testDF.drop(columns=['diagnosis']))
+    yTrain = trainDF['diagnosis'].values
+    yTest = testDF['diagnosis'].values
 
 
     #print("Class distribution (train):", np.bincount(yTrain))
@@ -440,14 +436,18 @@ def main():
     print("Using device:", device)
   
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    trainingDataPath = os.path.join(base_dir, "Data", "heart_data", "heart_train.csv")
-    testingDataPath = os.path.join(base_dir, "Data", "heart_data", "heart_test.csv")
+    trainingDataPath = os.path.join(base_dir, "Data", "breast_cancer", "breastTrain.csv")
+    testingDataPath = os.path.join(base_dir, "Data", "breast_cancer", "breastTest.csv")
 
     # First, standardising data, function returns 4 lists, all standardised.
     xTrain, xTest, yTrain, yTest = standardise(trainingDataPath, testingDataPath)
 
-    # DEBUGGIN - REMOVE LATER
-    print(f'Unique Y Values : {np.unique(yTrain)}')
+    # This can be used to set a baseline performance for the model
+    get_baseline = True
+    if get_baseline:
+        rf = RandomForestClassifier(n_estimators=100, random_state=42)
+        rf.fit(xTrain, yTrain)
+        print(f"Random Forest accuracy: {rf.score(xTest, yTest):.4f}")
     # ABOVE REMOVE LATER
 
     # Next, creating dataset objects
