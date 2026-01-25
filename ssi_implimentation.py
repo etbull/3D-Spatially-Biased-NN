@@ -25,6 +25,7 @@ first_grad_list = []
 last_grad_list = []
 ratio_list = []
 
+
 """
 EdgesModule defines edges as linear neurons
 """
@@ -92,7 +93,7 @@ class GraphModule(nn.Module):
                 inital_node = node
         
         # Normalising and returning the final output node
-        exit_output = node_outputs[self.exit_node] / node_counts[self.exit_node]  # NOTE: Could make this a learnable paramter?
+        exit_output = self.exit_weight(node_outputs[self.exit_node]) #node_outputs[self.exit_node] / node_counts[self.exit_node]  # NOTE: Could make this a learnable paramter?
         return self.norm(exit_output+x) #  residual connection in form of + x
 
     
@@ -122,7 +123,7 @@ class GraphModule(nn.Module):
 GraphLayer stacks Graphs vertically, they all get the same input
 """
 class GraphLayer(nn.Module):
-    def __init__(self, graph, dim, num_layers):
+    def __init__(self, graph, dim, num_layers, dropout=0.05):
         super().__init__()
         # Adding multiple graphs to one layer
         self.vertical_layers = nn.ModuleList(
@@ -425,6 +426,11 @@ def plot_training_metrics():
     print(f"Plot saved to: {save_path}")
 
     plt.show()
+
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import r2_score
+import numpy as np
 
 # The main loop of the program 
 def main():

@@ -50,7 +50,7 @@ Confusion Matrix:
  6. 271872 connections
 
  Here is the model architecture:
- ```
+ ```python
  class Model(nn.Module):
     def __init__(self, input_length, num_classes):
         super(Model, self).__init__()
@@ -76,9 +76,9 @@ From this, there are two 3D implimentations I plan to try:
 1. The implimentation where I have one input node in each 3d Shape making a super node (the 3d shape) with each node within the shape being a sub node. This will be the "Super/Sub Implimentation (SSI)"
 2. The implimentation where I have treat the shape (or multiple chained together) as the entire layer (e.g. the same input goes to the red and green nodes in the above picture) will be called the "Traditional Implimentation (TI)"
 
-## Super Sub Implimentation
+# Super Sub Implimentation
 
-# Proof of concept
+## Proof of concept
 The initial proof of concept algorithm is shown in [ssi_algo_demo.py](ssi_algo_demo.py).
 
 This uses a backtrack DFS algorithm to collect all paths from the chosen graph. These can then be filtered. 
@@ -87,7 +87,7 @@ Below is a gif on the paths the algorithm generated for the graph I made, which 
 
 ![POC GIF](Pictures/paths.gif "Proof of Concept SSI")
 
-# Basic Implimentation
+## Basic Implimentation - First Attempt
 The basic implimentation of this idea is stored in [customnn_module.py](SuberSub_Implimentation/custom_nn_module.py).
 
 This creates 4 custom nn.Modules. 
@@ -117,7 +117,7 @@ This resulted in the same results as the above picture, with accuracy hanging ar
 
 To try and diagnose the issue, I made the parameters much simpler. The parameters were:
 
-```
+```python
 dim = 1
 width = 4
 depth = 3
@@ -127,7 +127,7 @@ The graph of the first, last, and ratio of gradient is shown in the picture belo
 
 ![Gradients 1](Pictures/gradient_1.png "Gradients 1")
 
-```
+```python
 First Grads: [0.0012952653924003243, 0.00022093663574196398, 0.0005459666717797518, 0.0010310980724170804, 0.0003186153480783105]
 Last Grads: [0.0, 0.0, 0.0, 0.0, 0.0]
 Ratio List: [0, 0, 0, 0, 0]
@@ -139,4 +139,35 @@ Actions I took to try fix this include:
 1. In the GraphModule, make the forward pass output square before returning. This aims to increase values and make them all positive. This did help increase gradients, but lowered model accuracy as negative connections couldn't exist so I removed this. 
 2. In EdgeModule, I switched from RELU to Leaky RELU. This fixed the vanishing gradients, but the model was still stuck at 0.73 accuracy. The graphs of gradients and training metrics are [here (grads)](Pictures/gradient_3.png) and [here (training)](Pictures/training_metrics_2.png).
 3. I then increased dimension to 64, leaving everything else as is, including leaky relu. This helped speed up model convergance, but it still got stuck at 0.73. 
-4. I then added drop out in edge module at 0.2 a
+4. I changed in GraphModule the exit node instead of averaging before normalisation, a learnable parameter was applied before normalisation. 
+
+None of these seemed to have a major impact on test data accuracy. 
+
+I then tried a Random forrest classified to see if the data could partially be the problem. The code is below:
+```python
+from sklearn.ensemble import RandomForestClassifier
+
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+rf.fit(xTrain, yTrain)
+print(f"Random Forest accuracy: {rf.score(xTest, yTest):.4f}")
+```
+
+The output of this was:
+```
+Random Forest accuracy: 0.7295
+```
+
+To confirm these results, I then ran a linear regression. The output was:
+```
+Training Accuracy: 0.7407
+Test Accuracy: 0.7405
+Training R²: -0.0544
+Test R²: -0.0535
+McFadden's Pseudo R²: 0.2218
+F1 Score: 0.6837
+```
+
+This indicates that the limiting factor was not either the baseline or the SSI model, but instead the data collected! I will run this again with a differnt dataset AFTER reading the kaggle comments to make sure it's appropriate :) 
+
+## Basic Implimentation - Second Attempt
+For this attempt, I keep everthing the same except I use a new dataset. 
