@@ -21,12 +21,15 @@ import matplotlib.pyplot as plt
 accuracy_list = []
 loss_list = []
 f1_list = []
+first_grad_list = [] 
+last_grad_list = []
+ratio_list = []
 
 """
 EdgesModule defines edges as linear neurons
 """
 class EdgesModule(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim, dropout=0.2):
         super().__init__()
         self.edge = nn.Linear(dim,dim)
 
@@ -37,7 +40,7 @@ class EdgesModule(nn.Module):
         
     def forward(self, x):
         input = self.edge(x)
-        output = nn.functional.relu(input)
+        output = F.leaky_relu(self.edge(x), negative_slope=0.01)
         return output
     
 """
@@ -51,6 +54,8 @@ class GraphModule(nn.Module):
         self.entry_node = list(graph.keys())[0]
         self.exit_node = list(graph.keys())[-1]
         self.dim = dim
+        self.exit_weight = EdgesModule(self.dim)
+
         # Generating all paths from graph
         self.all_paths = self.generate_paths(graph, self.entry_node, self.exit_node)
         self.norm = nn.BatchNorm1d(dim)
@@ -87,8 +92,8 @@ class GraphModule(nn.Module):
                 inital_node = node
         
         # Normalising and returning the final output node
-        exit_output = node_outputs[self.exit_node] / node_counts[self.exit_node]
-        return self.norm(exit_output+x) # Adding residual connection
+        exit_output = node_outputs[self.exit_node] / node_counts[self.exit_node]  # NOTE: Could make this a learnable paramter?
+        return self.norm(exit_output+x) #  residual connection in form of + x
 
     
     def generate_paths(self, graph, start, end):
@@ -257,7 +262,6 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
             x, y = x.to(device), y.to(device)
             optimizer.zero_grad()
             yHat = model(x)
-            if count%100 == 0: print(f"Logits mean: {yHat.mean(dim=0)}, std: {yHat.std(dim=0)}")
 
             # Struggling to distinguish between classes, guessing all 1, so trying to seperate the classes more by rewarding wide distinctions.
             logits = yHat 
@@ -270,6 +274,24 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+
+            # Debugging stuff here, makes graphs of gradients and rcords means / std dev of predictions 
+            if count%100 == 0: 
+                print(f"Logits mean: {yHat.mean(dim=0)}, std: {yHat.std(dim=0)}")
+                first_grad = model.layers[0].vertical_layers[0].edges['0-1'].edge.weight.grad.norm().item()
+                last_grad = model.layers[-1].vertical_layers[0].edges['0-1'].edge.weight.grad.norm().item()
+                try:
+                    first_grad_list.append(first_grad)
+                except ZeroDivisionError:
+                    first_grad_list.append(0)
+                try:
+                    last_grad_list.append(last_grad)
+                except ZeroDivisionError:
+                    last_grad_list.append(0)
+                try:
+                    ratio_list.append(first_grad/last_grad)
+                except:
+                    ratio_list.append(0)
 
             total_loss += loss.item()
             count += 1
@@ -312,6 +334,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
         print("Confusion Matrix:")
         print(cm)
         print("-"*50)
+        save_current_gradient_deails()
 
         if f1 > best_f1:
             best_f1 = f1
@@ -322,6 +345,47 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
     print("Training complete!")
     torch.save(model.state_dict(), "modelSave.pth")
     print("Model saved!")
+
+def save_current_gradient_deails():
+    # Global variables are first_grad_list, last_grad_list, ratio_list
+    length = range(1, len(first_grad_list) + 1)
+
+    plt.figure(figsize=(12, 8))
+    plt.subplot(2, 1, 1)
+    plt.plot(length, first_grad_list, marker='o', label="First Gradient")
+    plt.plot(length, last_grad_list, marker='o', label="Last Gradient")
+    plt.yscale("log")
+
+    for x, y in zip(length, first_grad_list):
+        plt.text(x, y, f"{y:.2e}", fontsize=8, ha='center', va='bottom')
+
+    for x, y in zip(length, last_grad_list):
+        plt.text(x, y, f"{y:.2e}", fontsize=8, ha='center', va='top')
+
+    plt.xlabel("Epoch")
+    plt.ylabel("Gradient Value (log scale)")
+    plt.title("First and Last Gradient Over Time")
+    plt.legend()
+    plt.grid(True, which="both", linestyle="--", alpha=0.5)
+    plt.subplot(2, 1, 2)
+    plt.plot(length, ratio_list, marker='o', label="Ratio of first to last gradient")
+    plt.yscale("log")
+
+    for x, y in zip(length, ratio_list):
+        plt.text(x, y, f"{y:.2e}", fontsize=8, ha='center', va='bottom')
+
+    plt.xlabel("Epoch")
+    plt.ylabel("Ratio (log scale)")
+    plt.title("Gradient Ratio Over Time")
+    plt.legend()
+    plt.grid(True, which="both", linestyle="--", alpha=0.5)
+    plt.tight_layout()
+
+    save_path = os.path.join(os.getcwd(), "gradient_graphs.png")
+    plt.savefig(save_path)
+    print(f"Plot saved to: {save_path}")
+    print(f'First Grads: {first_grad_list}\nLast Grads: {last_grad_list}\nRatio List: {ratio_list}')
+
 
 def plot_training_metrics():
     """
@@ -364,7 +428,6 @@ def plot_training_metrics():
 
 # The main loop of the program 
 def main():
-
     # Using GPU if avalible 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cudnn.benchmark = True
@@ -403,9 +466,9 @@ def main():
         6:[2,4,7],
         7:[3,5,6]
     }
-    dim = 8
+    dim = 64
 
-    model = SuperModule(graph, dim, 5, 4, xTrain.shape[1], 2)
+    model = SuperModule(graph, dim, 4, 3, xTrain.shape[1], 2)
     print(f"Number of paths found: {len(model.layers[0].vertical_layers[0].all_paths)}")
     print(f"Paths: {model.layers[0].vertical_layers[0].all_paths}")
     model.to(device)

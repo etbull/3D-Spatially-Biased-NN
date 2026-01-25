@@ -112,3 +112,31 @@ Confusion Matrix:
 ![Training figure 1](Pictures/training_metrics_1.png "Training figure 1")
 
 Just to confirm the model was accurately learning, I increased the lr from 0.00075 to 0.0005. I changed epochs from 10 t 50. 
+
+This resulted in the same results as the above picture, with accuracy hanging around 0.73 and F1 Score around 0.68. 
+
+To try and diagnose the issue, I made the parameters much simpler. The parameters were:
+
+```
+dim = 1
+width = 4
+depth = 3
+```
+
+The graph of the first, last, and ratio of gradient is shown in the picture below, with the corresponding values from the first epoch (recorded each 100 values) are shown below that. 
+
+![Gradients 1](Pictures/gradient_1.png "Gradients 1")
+
+```
+First Grads: [0.0012952653924003243, 0.00022093663574196398, 0.0005459666717797518, 0.0010310980724170804, 0.0003186153480783105]
+Last Grads: [0.0, 0.0, 0.0, 0.0, 0.0]
+Ratio List: [0, 0, 0, 0, 0]
+```
+
+From this it's clear that the issue is that the gradient quickly goes to 0 and this means the model can't make any further progress. 
+
+Actions I took to try fix this include:
+1. In the GraphModule, make the forward pass output square before returning. This aims to increase values and make them all positive. This did help increase gradients, but lowered model accuracy as negative connections couldn't exist so I removed this. 
+2. In EdgeModule, I switched from RELU to Leaky RELU. This fixed the vanishing gradients, but the model was still stuck at 0.73 accuracy. The graphs of gradients and training metrics are [here (grads)](Pictures/gradient_3.png) and [here (training)](Pictures/training_metrics_2.png).
+3. I then increased dimension to 64, leaving everything else as is, including leaky relu. This helped speed up model convergance, but it still got stuck at 0.73. 
+4. I then added drop out in edge module at 0.2 a
