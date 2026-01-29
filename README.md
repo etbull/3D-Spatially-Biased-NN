@@ -1,6 +1,6 @@
 # 3D-Spatially-Biased-NN
 A modification to PyTorch that allows for higher dimensional modelling and spatially biased connections between these higher dimension layers. 
-See the [Notes Markdown](NOTES.md) for more details on how its going so far.
+See the [Notes Markdown](NOTES.md) for more details on how its going so far!
 
 ## Overall Plan
 1. Create a basic template to modify and use
