@@ -202,18 +202,20 @@ def standardise(trainingPathExo, testingPathExo):
     :param testingPathExo: path to testing data csv
     """
 
-    trainDF = pd.read_csv(trainingPathExo).drop(columns="id")
-    testDF = pd.read_csv(testingPathExo).drop(columns="id")
+    #trainDF = pd.read_csv(trainingPathExo).drop(columns="id")
+    #testDF = pd.read_csv(testingPathExo).drop(columns="id")
+    trainDF = pd.read_csv(trainingPathExo)
+    testDF = pd.read_csv(testingPathExo)
     print(testDF.head())
 
     # Replacement maps for onehot encoding if required
-    oneHotRequired = True
+    oneHotRequired = False
     if oneHotRequired:
         outcome_map = {'M':1, 'B':0}
 
         # Actually replacing
-        trainDF['diagnosis'] = trainDF['diagnosis'].map(outcome_map)
-        testDF['diagnosis'] = testDF['diagnosis'].map(outcome_map)
+        trainDF['Cover_Type'] = trainDF['Cover_Type'].map(outcome_map)
+        testDF['Cover_Type'] = testDF['Cover_Type'].map(outcome_map)
 
 
     # Dropping Nan rows
@@ -222,15 +224,17 @@ def standardise(trainingPathExo, testingPathExo):
 
     # Standardising
     scaler = StandardScaler()
-    scaler.fit(trainDF.drop(columns=['diagnosis']))
-    xTrain = scaler.transform(trainDF.drop(columns=['diagnosis']))
-    xTest = scaler.transform(testDF.drop(columns=['diagnosis']))
-    yTrain = trainDF['diagnosis'].values
-    yTest = testDF['diagnosis'].values
+    scaler.fit(trainDF.drop(columns=['Cover_Type']))
+    xTrain = scaler.transform(trainDF.drop(columns=['Cover_Type']))
+    xTest = scaler.transform(testDF.drop(columns=['Cover_Type']))
+    yTrain = trainDF['Cover_Type'].values
+    yTest = testDF['Cover_Type'].values
 
-
+    # Changing so index is correct
+    yTrain = yTrain-1
+    yTest = yTest-1
     #print("Class distribution (train):", np.bincount(yTrain))
-    #print("Class distribution (test):", np.bincount(yTest))
+    print("Class distribution (test):", np.bincount(yTest))
     return xTrain, xTest, yTrain, yTest
 
 # This function saves the model weights
@@ -243,7 +247,7 @@ def sigmoid(x):
     return 1/(1+np.exp(-x))
 
 # This is the main training and evaluation loop
-def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
+def train_model(model, trainLoader, testLoader, device, epochs=4, lr=0.0005):
     # Compute class weights based on training labels
     #class_weights = torch.tensor([1.0, 1.5]).to(device)
     criterion = nn.CrossEntropyLoss()
@@ -260,20 +264,15 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
             optimizer.zero_grad()
             yHat = model(x)
 
-            # Struggling to distinguish between classes, guessing all 1, so trying to seperate the classes more by rewarding wide distinctions.
             logits = yHat 
-            separation = torch.abs(logits[:, 0] - logits[:, 1])
-            margin = 10.0
-            separation_penalty = torch.clamp(margin - separation, min=0)
-
-            loss = criterion(logits, y) + 0.0 * separation_penalty.mean()
+            loss = criterion(logits, y)
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             # Debugging stuff here, makes graphs of gradients and rcords means / std dev of predictions 
-            if count%100 == 0: 
+            if count%2000 == 0: 
                 print(f"Logits mean: {yHat.mean(dim=0)}, std: {yHat.std(dim=0)}")
                 first_grad = model.layers[0].vertical_layers[0].edges['0-1'].edge.weight.grad.norm().item()
                 last_grad = model.layers[-1].vertical_layers[0].edges['0-1'].edge.weight.grad.norm().item()
@@ -303,8 +302,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
                 x, y = x.to(device), y.to(device)
                 yHat = model(x)
                 probs = F.softmax(yHat, dim=1)
-                threshold = 0.5
-                preds = (probs[:,1] >= threshold).long()
+                preds = torch.argmax(probs, dim=1)
 
                 all_probs.extend(probs[:,1].cpu().numpy())
                 all_preds.extend(preds.cpu().numpy())
@@ -316,9 +314,8 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
         all_probs = np.array(all_probs)
 
         accuracy = accuracy_score(all_labels, all_preds)
-        f1 = f1_score(all_labels, all_preds)
+        f1 = f1_score(all_labels, all_preds, average='weighted') 
         cm = confusion_matrix(all_labels, all_preds)
-        tp = np.sum((all_preds == 1) & (all_labels == 1))
 
         # Assigning metrics to tracking lists
         accuracy_list.append(accuracy)
@@ -326,12 +323,15 @@ def train_model(model, trainLoader, testLoader, device, epochs=10, lr=0.0005):
         f1_list.append(f1)
 
         print(f"Top positive probs in this epoch: {np.sort(all_probs)[-5:]}")
-        print(f"True positives: {tp} / {np.sum(all_labels==1)}")
         print(f"Test Accuracy: {accuracy:.4f}, F1-score: {f1:.4f}")
         print("Confusion Matrix:")
         print(cm)
         print("-"*50)
         save_current_gradient_deails()
+        try:
+            plot_training_metrics()
+        except:
+            pass
 
         if f1 > best_f1:
             best_f1 = f1
@@ -436,16 +436,16 @@ def main():
     print("Using device:", device)
   
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    trainingDataPath = os.path.join(base_dir, "Data", "breast_cancer", "breastTrain.csv")
-    testingDataPath = os.path.join(base_dir, "Data", "breast_cancer", "breastTest.csv")
+    trainingDataPath = os.path.join(base_dir, "Data", "covtype", "covtype.csv")
+    testingDataPath = os.path.join(base_dir, "Data", "covtype", "covtype_test.csv")
 
     # First, standardising data, function returns 4 lists, all standardised.
     xTrain, xTest, yTrain, yTest = standardise(trainingDataPath, testingDataPath)
 
     # This can be used to set a baseline performance for the model
-    get_baseline = True
+    get_baseline = False
     if get_baseline:
-        rf = RandomForestClassifier(n_estimators=100, random_state=42)
+        rf = RandomForestClassifier(n_estimators=1000, random_state=42)
         rf.fit(xTrain, yTrain)
         print(f"Random Forest accuracy: {rf.score(xTest, yTest):.4f}")
     # ABOVE REMOVE LATER
@@ -472,9 +472,9 @@ def main():
         6:[2,4,7],
         7:[3,5,6]
     }
-    dim = 64
+    dim = 512
 
-    model = SuperModule(graph, dim, 4, 3, xTrain.shape[1], 2)
+    model = SuperModule(graph, dim, 4, 3, xTrain.shape[1], 7)
     print(f"Number of paths found: {len(model.layers[0].vertical_layers[0].all_paths)}")
     print(f"Paths: {model.layers[0].vertical_layers[0].all_paths}")
     model.to(device)
