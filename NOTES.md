@@ -170,4 +170,6 @@ F1 Score: 0.6837
 This indicates that the limiting factor was not either the baseline or the SSI model, but instead the data collected! I will run this again with a differnt dataset AFTER reading the kaggle comments to make sure it's appropriate :) 
 
 ## Basic Implimentation - Second Attempt
-For this attempt, I keep everthing the same except I use a new dataset. 
+For this attempt, I keep everthing the same except I use a new dataset. I first used a breast cancer dataset, but this was to simple and the model instantly achived 0.99 accuracy on the test data. The same occured with a Covid Dataset. 
+
+The final data set chosen is the ```Forest Cover Type Dataset```. This changes the task from binary classification to 7 categories of classification. 
