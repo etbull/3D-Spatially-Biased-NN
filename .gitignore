@@ -1,5 +1,5 @@
 playground.py
 .venv/
 .vscode/
-.Data/covtype/covtype.csv
+.Data/covtype
 tmp

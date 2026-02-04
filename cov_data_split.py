@@ -24,13 +24,26 @@ def main():
     test_df = pd.DataFrame(columns=df.columns)
     amount_test = int(amount_test*total_length)+1
     amount_train = int(amount_train*total_length)+1
-    last_index = {i:0 for i in df.columns}
+    last_index = {i:0 for i,_ in counts.items()}
+    print(f'Amount test = {amount_test}, Amount train = {amount_train}\n')
 
     # filling dataframes
-    for current_df in [amount_train, amount_test]:
-        # iterating over each column, adding the needed amount of each one in, then recording the index at which it stopped to resume for the next one
+    for current_data in [[amount_train, train_df], [amount_test, test_df]]:
+        # iterating over Cover_Type, adding the needed amount of each one in, then recording the index at which it stopped to resume for the next one
         for i in last_index:
-            print(i)
+            single_covtype_df = df[df['Cover_Type']==i]  
+
+            start_row = last_index[i]
+            end_row = start_row+current_data[0]
+            rows_to_copy = single_covtype_df.iloc[start_row:end_row]
+            print(rows_to_copy.shape[0])
+            last_index[i] = end_row+1
+
+            current_data[1] = pd.concat([current_data[1], rows_to_copy], ignore_index=True)
+
+    # Checking output
+    print(train_df.head())
+            
 
 
 
