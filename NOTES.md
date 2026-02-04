@@ -173,3 +173,5 @@ This indicates that the limiting factor was not either the baseline or the SSI m
 For this attempt, I keep everthing the same except I use a new dataset. I first used a breast cancer dataset, but this was to simple and the model instantly achived 0.99 accuracy on the test data. The same occured with a Covid Dataset. 
 
 The final data set chosen is the ```Forest Cover Type Dataset```. This changes the task from binary classification to 7 categories of classification. 
+
+This dataset was too large for my GPU, so I made a script called cov_data_split.py to split the data into a smaller sample with the same proportions. 30% of original for training and 5% for testing

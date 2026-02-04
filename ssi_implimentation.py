@@ -436,7 +436,7 @@ def main():
     print("Using device:", device)
   
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    trainingDataPath = os.path.join(base_dir, "Data", "covtype", "covtype.csv")
+    trainingDataPath = os.path.join(base_dir, "Data", "covtype", "covtype_train.csv")
     testingDataPath = os.path.join(base_dir, "Data", "covtype", "covtype_test.csv")
 
     # First, standardising data, function returns 4 lists, all standardised.
