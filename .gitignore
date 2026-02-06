@@ -3,3 +3,4 @@ playground.py
 .vscode/
 .Data/covtype
 tmp
+*.pth
