@@ -174,4 +174,140 @@ For this attempt, I keep everthing the same except I use a new dataset. I first 
 
 The final data set chosen is the ```Forest Cover Type Dataset```. This changes the task from binary classification to 7 categories of classification. 
 
-This dataset was too large for my GPU, so I made a script called cov_data_split.py to split the data into a smaller sample with the same proportions. 30% of original for training and 5% for testing
+This dataset was too large for my GPU, so I made a script called cov_data_split.py to split the data into a smaller sample with the same proportions. 30% of original for training and 5% for testing.
+
+I make up for the class imbalance, I added a penalty for incorrect predictions which was inversely proportional to how often the class appears. 
+
+### Initial Run - Results
+The results from the inital run are as follows:
+
+```
+Best Accuracy on test: 0.7029
+Best F1 on test: 0.6910
+
+Final Accuracy on test:0.3646
+Final F1 on test: 0.1949
+```
+
+```
+Epoch 1 training loss: 0.4992
+Test Accuracy: 0.5809, F1-score: 0.5986
+Confusion Matrix:
+[[4526 1023   71    0  963  553 3456]
+ [4629 9533    0    0    0    0    3]
+ [   0    0 1787    0    0    0    0]
+ [   0    0  126   11    0    0    0]
+ [ 146  328    0    0    0    0    0]
+ [   0    0  848    0   13    7    0]
+ [  14    0    0    0    0    0 1011]]
+
+Epoch 2 training loss: 0.3440
+Test Accuracy: 0.7029, F1-score: 0.6910
+Confusion Matrix:
+[[ 7842  1826     0     0   432   178   314]
+ [ 3489 10676     0     0     0     0     0]
+ [    0     0  1703    12     0    72     0]
+ [    0     0    71    65     0     1     0]
+ [    6   468     0     0     0     0     0]
+ [    0     1   845     3    19     0     0]
+ [  893     0     0     0     0     0   132]]
+
+Epoch 3 training loss: 0.2850
+Test Accuracy: 0.6552, F1-score: 0.6745
+Confusion Matrix:
+[[7455  236    0    0 1691   85 1125]
+ [5207 8887    0    0   71    0    0]
+ [   0    0 1291    0    0  496    0]
+ [   0    0  132    0    0    5    0]
+ [   6  218    0    0  250    0    0]
+ [   0    0  675    0   20  173    0]
+ [  50    0    0    0    0    0  975]]
+
+Epoch 4 training loss: nan
+Test Accuracy: 0.3646, F1-score: 0.1949
+Confusion Matrix:
+[[10592     0     0     0     0     0     0]
+ [14165     0     0     0     0     0     0]
+ [ 1787     0     0     0     0     0     0]
+ [  137     0     0     0     0     0     0]
+ [  474     0     0     0     0     0     0]
+ [  868     0     0     0     0     0     0]
+ [ 1025     0     0     0     0     0     0]]
+```
+
+You can see the gradients over time below:
+
+![Gradients 4](Pictures/gradient_4.png "Gradients 4")
+
+You can see the loss and accuracy over time below:
+
+![Metrics 3](Pictures/training_metrics_3.png "Gradients 3")
+
+### Initial Run - Analysis
+
+It's clear that the model is learning well over the first 2 epochs, but then something goes wrong in the loss function such that the best way to minmise is is by predicting all one class. 
+
+My idea to fix it is to first try increasing the penalty for flase positives. Currently it is at ```loss = base_loss + 0.1 * penalty```, I will make it ```loss = base_loss + 0.05 * penalty``` to fix gradient problem. I will also compute panalty with gradients.
+I am also adding class weights, in proportion to how often that class appears. I also added a learning rate schedular based on F1 score. To increase training speed I increased the batch size from 32 to 1024.
+
+### Follow up changes
+
+These changes, as well as changing from 8 epochs to 35 epochs didn't increase the maximum previuosly reached results. However, take a look at the two confusion matrixes side by side:
+
+```
+Matrix 1: Inital Confusion Matrix (highest f1 score epoch):
+[[ 7842  1826     0     0   432   178   314]
+ [ 3489 10676     0     0     0     0     0]
+ [    0     0  1703    12     0    72     0]
+ [    0     0    71    65     0     1     0]
+ [    6   468     0     0     0     0     0]
+ [    0     1   845     3    19     0     0]
+ [  893     0     0     0     0     0   132]]
+
+Matrix 2: Confusion Matrix after changes (highest f1 score epoch):
+[[6871  778    6    0  941  339 1657]
+ [4777 9250    0    0  137    0    1]
+ [   0    0 1380  192    0  215    0]
+ [   0    0   17  115    0    5    0]
+ [  29   43    0    0  402    0    0]
+ [   0    0  340   32    9  487    0]
+ [   1    0    0    0    0    0 1024]]
+```
+
+Using the below simple algorithm, I calculated a better score to show how well the model performs. 
+```python
+def calc_score(matrix):
+    avg_list = []
+    for row_index in range(len(matrix)):
+        sum_row = sum(matrix[row_index])
+        target_number = matrix[row_index][row_index]
+
+        proportion_correct = target_number/sum_row
+        avg_list.append(proportion_correct)
+        
+    return np.average(avg_list)
+```
+
+From this, matrix 1 score 0.44 while matrix 2 score 0.76, almost double, showing the 2nd model is indeed better. 
+
+I then calculated this for several epochs of the most recent training and graphed it, the result is shown below. 
+
+![C Score 1](Pictures/custom_score_1.png "Score 1")
+
+This is interesting, as unlike the F1 score which almost immediately plateus, this shows the model is actually getting better until around 10 epochs. 
+
+After increasing training to 60 epochs, this remained at 0.75 score.
+
+After 165 epochs this was the cf, it also had a 0.76 score:
+```[[6701  668    6    0 1125  256 1836]
+ [4768 9291    0    0  103    0    3]
+ [   0    0 1446  153    0  188    0]
+ [   0    0   32  103    0    2    0]
+ [  30   47    0    0  397    0    0]
+ [   1    0  304   24    9  530    0]
+ [   0    0    0    0    0    0 1025]]
+ ```
+
+ You can see the training metrics below.
+
+ ![Training Metrics 4](Pictures/training_metrics_4.png "Train 4")
