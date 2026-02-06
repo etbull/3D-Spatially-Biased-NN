@@ -247,12 +247,35 @@ def sigmoid(x):
     return 1/(1+np.exp(-x))
 
 # This is the main training and evaluation loop
-def train_model(model, trainLoader, testLoader, device, epochs=4, lr=0.0005):
+def train_model(model, trainLoader, testLoader, device, epochs=165, lr=0.0005):
     # Compute class weights based on training labels
-    #class_weights = torch.tensor([1.0, 1.5]).to(device)
-    criterion = nn.CrossEntropyLoss()
+    penalty_dict = {1: 0.487599, 0: 0.364605, 2: 0.061537, 6: 0.035300, 5: 0.029890, 4: 0.016338, 3: 0.004727}
+    max_class = max(penalty_dict.keys())
+    class_weights = torch.zeros(max_class + 1, device=device)
+    for class_id, weight in penalty_dict.items():
+        class_weights[class_id] = 1.0 / (weight + 1e-6)
+    class_weights = class_weights / class_weights.sum() * len(penalty_dict)
+
+    # Now defining loss functgion and optimiser
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     best_f1 = 0.0
+
+    # Adding lr schedualr
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, 
+        mode='max',           
+        factor=0.5,           
+        patience=2,          
+        verbose=True,
+        min_lr=1e-6
+    )
+
+
+    # Stuff for the custom loss 
+    penalty_weights = torch.zeros(max_class + 1, device=device)
+    for class_id, weight in penalty_dict.items():
+        penalty_weights[class_id] = abs(weight - 0.5)
 
     for epoch in range(epochs):
         count = 0
@@ -262,18 +285,25 @@ def train_model(model, trainLoader, testLoader, device, epochs=4, lr=0.0005):
         for x, y in tqdm(trainLoader, desc=f"Epoch {epoch+1}/{epochs}"):
             x, y = x.to(device), y.to(device)
             optimizer.zero_grad()
-            yHat = model(x)
+            logits = model(x)
 
-            logits = yHat 
-            loss = criterion(logits, y)
+            # Adding a custom penalty to help with the class imbalance
+            base_loss = criterion(logits, y)
+            probs = F.softmax(logits, dim=1)
 
+            confidence_penalty = (1 - probs[range(len(y)), y]) 
+            class_penalties = penalty_weights[y]
+            penalty = (class_penalties * confidence_penalty).mean()
+
+            loss = base_loss + 0.025 * penalty 
+            
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             # Debugging stuff here, makes graphs of gradients and rcords means / std dev of predictions 
             if count%2000 == 0: 
-                print(f"Logits mean: {yHat.mean(dim=0)}, std: {yHat.std(dim=0)}")
+                print(f"Logits mean: {logits.mean(dim=0)}, std: {logits.std(dim=0)}")
                 first_grad = model.layers[0].vertical_layers[0].edges['0-1'].edge.weight.grad.norm().item()
                 last_grad = model.layers[-1].vertical_layers[0].edges['0-1'].edge.weight.grad.norm().item()
                 try:
@@ -315,6 +345,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=4, lr=0.0005):
 
         accuracy = accuracy_score(all_labels, all_preds)
         f1 = f1_score(all_labels, all_preds, average='weighted') 
+        scheduler.step(f1)
         cm = confusion_matrix(all_labels, all_preds)
 
         # Assigning metrics to tracking lists
@@ -456,7 +487,7 @@ def main():
     print('Datasets created...')
 
     # Creating dataloader object 
-    batchSize = 32
+    batchSize = 1024
     trainLoader = DataLoader(trainDataset, batch_size=batchSize, shuffle=True)
     testLoader = DataLoader(testDataset, batch_size=batchSize, shuffle=False)
     print('Dataloaders created...')
