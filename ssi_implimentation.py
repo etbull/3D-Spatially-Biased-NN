@@ -246,6 +246,19 @@ def summarySave(finalLoss, model):
 def sigmoid(x):
     return 1/(1+np.exp(-x))
 
+def customCriterion(logits, y, alpha=None, gamma=2.0):
+    ce_loss = F.cross_entropy(logits, y, reduction='none')  # [batch]
+    probs = F.softmax(logits, dim=1)
+    pt = probs[range(len(y)), y]  
+    
+    focal_weight = (1 - pt) ** gamma
+    loss = focal_weight * ce_loss
+    
+    if alpha is not None:
+        loss = loss * alpha[y]
+    
+    return loss.mean()
+
 # This is the main training and evaluation loop
 def train_model(model, trainLoader, testLoader, device, epochs=165, lr=0.0005):
     # Compute class weights based on training labels
@@ -288,7 +301,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=165, lr=0.0005):
             logits = model(x)
 
             # Adding a custom penalty to help with the class imbalance
-            base_loss = criterion(logits, y)
+            base_loss = customCriterion(logits, y)
             probs = F.softmax(logits, dim=1)
 
             confidence_penalty = (1 - probs[range(len(y)), y]) 
