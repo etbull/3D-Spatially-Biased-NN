@@ -311,3 +311,7 @@ After 165 epochs this was the cf, it also had a 0.76 score:
  You can see the training metrics below.
 
  ![Training Metrics 4](Pictures/training_metrics_4.png "Train 4")
+
+ After many changes, I couldn't get the results to be significantly better than that. 
+
+ # Basic Neural Network Baseline 2

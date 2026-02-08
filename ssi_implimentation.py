@@ -17,6 +17,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.utils.class_weight import compute_class_weight
 
 # Some global variables for model training analysis
 accuracy_list = []
@@ -31,7 +32,7 @@ ratio_list = []
 EdgesModule defines edges as linear neurons
 """
 class EdgesModule(nn.Module):
-    def __init__(self, dim, dropout=0.2):
+    def __init__(self, dim, dropout=0.1):
         super().__init__()
         self.edge = nn.Linear(dim,dim)
 
@@ -95,7 +96,7 @@ class GraphModule(nn.Module):
                 inital_node = node
         
         # Normalising and returning the final output node
-        exit_output = self.exit_weight(node_outputs[self.exit_node]) #node_outputs[self.exit_node] / node_counts[self.exit_node]  # NOTE: Could make this a learnable paramter?
+        exit_output = self.dropout(self.exit_weight(node_outputs[self.exit_node])) #node_outputs[self.exit_node] / node_counts[self.exit_node]  # NOTE: Could make this a learnable paramter?
         return self.norm(exit_output+x) #  residual connection in form of + x
 
     
@@ -247,28 +248,30 @@ def summarySave(finalLoss, model):
 def sigmoid(x):
     return 1/(1+np.exp(-x))
 
-def customCriterion(logits, y, class_weights, gamma=0.5):
-    ce_loss = F.cross_entropy(logits, y, reduction='none')
+def customCriterion(logits, y, alpha=None, gamma=2.0):
+    ce_loss = F.cross_entropy(logits, y, reduction='none') 
     probs = F.softmax(logits, dim=1)
-    pt = probs[range(len(y)), y]
+    pt = probs[range(len(y)), y]  
     
-    # Gentle focusing
     focal_weight = (1 - pt) ** gamma
+    loss = focal_weight * ce_loss
     
-    # Apply class weights
-    weighted_loss = focal_weight * ce_loss * class_weights[y]
+    if alpha is not None:
+        loss = loss * alpha[y]
     
-    return weighted_loss.mean()
+    return loss.mean()
 
 # This is the main training and evaluation loop
-def train_model(model, trainLoader, testLoader, device, epochs=30, lr=0.0001):
+def train_model(model, trainLoader, testLoader, device, yTrain, epochs=30, lr=0.0005):
     # Compute class weights based on training labels
     penalty_dict = {1: 0.487599, 0: 0.364605, 2: 0.061537, 6: 0.035300, 5: 0.029890, 4: 0.016338, 3: 0.004727}
     max_class = max(penalty_dict.keys())
-    class_weights = torch.zeros(max_class + 1, device=device)
-    for class_id, weight in penalty_dict.items():
-        class_weights[class_id] = 1.0 / (weight + 1e-6)
-    class_weights = class_weights / class_weights.sum() * len(penalty_dict)
+    class_weights_np = compute_class_weight(
+        class_weight='balanced',
+        classes=np.unique(yTrain),
+        y=yTrain
+    )
+    class_weights = torch.tensor(class_weights_np, dtype=torch.float32, device=device)
 
     # Now defining loss functgion and optimiser
     criterion = nn.CrossEntropyLoss(weight=class_weights)
@@ -524,7 +527,7 @@ def main():
     print(f"Paths: {model.layers[0].vertical_layers[0].all_paths}")
     model.to(device)
     print('Model created, starting training...')
-    train_model(model, trainLoader, testLoader, device)
+    train_model(model, trainLoader, testLoader, device, yTrain)
 
     # Plotting Training Metrics
     plot_training_metrics()
