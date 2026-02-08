@@ -49,7 +49,7 @@ class EdgesModule(nn.Module):
 Graph Module defines model where input goes into graph, is calculated along several paths, normalised, and outputed
 """
 class GraphModule(nn.Module):
-    def __init__(self, graph, dim):
+    def __init__(self, graph, dim, dropout = 0.2):
         super().__init__()
         # Defining important stuff like the graph dict, the entry and exit node, and how many dimensions in the input data
         self.graph = graph
@@ -57,6 +57,7 @@ class GraphModule(nn.Module):
         self.exit_node = list(graph.keys())[-1]
         self.dim = dim
         self.exit_weight = EdgesModule(self.dim)
+        self.dropout = nn.Dropout(dropout)
 
         # Generating all paths from graph
         self.all_paths = self.generate_paths(graph, self.entry_node, self.exit_node)
@@ -246,21 +247,21 @@ def summarySave(finalLoss, model):
 def sigmoid(x):
     return 1/(1+np.exp(-x))
 
-def customCriterion(logits, y, alpha=None, gamma=2.0):
-    ce_loss = F.cross_entropy(logits, y, reduction='none')  # [batch]
+def customCriterion(logits, y, class_weights, gamma=0.5):
+    ce_loss = F.cross_entropy(logits, y, reduction='none')
     probs = F.softmax(logits, dim=1)
-    pt = probs[range(len(y)), y]  
+    pt = probs[range(len(y)), y]
     
+    # Gentle focusing
     focal_weight = (1 - pt) ** gamma
-    loss = focal_weight * ce_loss
     
-    if alpha is not None:
-        loss = loss * alpha[y]
+    # Apply class weights
+    weighted_loss = focal_weight * ce_loss * class_weights[y]
     
-    return loss.mean()
+    return weighted_loss.mean()
 
 # This is the main training and evaluation loop
-def train_model(model, trainLoader, testLoader, device, epochs=165, lr=0.0005):
+def train_model(model, trainLoader, testLoader, device, epochs=30, lr=0.0001):
     # Compute class weights based on training labels
     penalty_dict = {1: 0.487599, 0: 0.364605, 2: 0.061537, 6: 0.035300, 5: 0.029890, 4: 0.016338, 3: 0.004727}
     max_class = max(penalty_dict.keys())
@@ -301,7 +302,7 @@ def train_model(model, trainLoader, testLoader, device, epochs=165, lr=0.0005):
             logits = model(x)
 
             # Adding a custom penalty to help with the class imbalance
-            base_loss = customCriterion(logits, y)
+            base_loss = customCriterion(logits, y, class_weights)
             probs = F.softmax(logits, dim=1)
 
             confidence_penalty = (1 - probs[range(len(y)), y]) 
